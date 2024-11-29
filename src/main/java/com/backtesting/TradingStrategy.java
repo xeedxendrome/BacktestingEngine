@@ -6,50 +6,56 @@ public class TradingStrategy {
 
     private static final int SHORT_TERM_WINDOW = 50;
     private static final int LONG_TERM_WINDOW = 200;
-    private static final double SIGNAL_THRESHOLD = 0.02;
+    private static final double DEFAULT_SIGNAL_THRESHOLD = 0.02;
     private static final int MIN_VOLUME = 100000;
+    private static final int RSI_PERIOD = 14;
+    private static final double RSI_OVERBOUGHT = 70.0;
+    private static final double RSI_OVERSOLD = 30.0;
 
-    private static final double STOP_LOSS = 0.02; // 2% loss
-    private static final double TAKE_PROFIT = 0.04; // 4% profit
+    private static final double BASE_STOP_LOSS = 0.02; // 2% default loss
+    private static final double BASE_TAKE_PROFIT = 0.04; // 4% default profit
 
-    /**
-     * Runs the improved moving average strategy with risk management and dynamic thresholds.
-     */
     public Portfolio runImprovedStrategy(Map<String, List<StockData>> stockDataMap, List<Double> marketReturns) {
         Portfolio portfolio = new Portfolio();
 
-        // Filter liquid stocks based on average volume
+        // Filter liquid stocks
         List<String> liquidStocks = filterLiquidStocks(stockDataMap, MIN_VOLUME);
 
         for (String symbol : liquidStocks) {
             List<StockData> stockData = stockDataMap.get(symbol);
 
-            if (stockData.size() < LONG_TERM_WINDOW) continue; // Skip stocks with insufficient data
+            if (stockData.size() < LONG_TERM_WINDOW) continue;
 
             List<TradeSignal> signals = generateSignals(stockData);
             portfolio.executeSignals(symbol, signals, stockData);
         }
 
-        // Add market returns for regression analysis
         portfolio.addMarketReturns(marketReturns);
-
         return portfolio;
     }
 
-    /**
-     * Generates trade signals using exponential moving averages (EWA).
-     */
     private List<TradeSignal> generateSignals(List<StockData> stockData) {
         List<TradeSignal> signals = new ArrayList<>();
         double[] shortTermEWA = calculateEWA(stockData, SHORT_TERM_WINDOW);
         double[] longTermEWA = calculateEWA(stockData, LONG_TERM_WINDOW);
+        double[] rsi = calculateRSI(stockData, RSI_PERIOD);
 
         for (int i = 1; i < stockData.size(); i++) {
             double diff = shortTermEWA[i] - longTermEWA[i];
+            double volatilityFactor = calculateVolatility(stockData, i);
 
-            if (diff > SIGNAL_THRESHOLD && (shortTermEWA[i - 1] - longTermEWA[i - 1] <= SIGNAL_THRESHOLD)) {
+            // Dynamic threshold based on volatility
+            double dynamicThreshold = DEFAULT_SIGNAL_THRESHOLD * volatilityFactor;
+
+            if (diff > dynamicThreshold &&
+                    (shortTermEWA[i - 1] - longTermEWA[i - 1] <= dynamicThreshold) &&
+                    rsi[i] < RSI_OVERSOLD) {
+
                 signals.add(new TradeSignal(stockData.get(i).getDate(), TradeSignal.BUY));
-            } else if (diff < -SIGNAL_THRESHOLD && (shortTermEWA[i - 1] - longTermEWA[i - 1] >= -SIGNAL_THRESHOLD)) {
+            } else if (diff < -dynamicThreshold &&
+                    (shortTermEWA[i - 1] - longTermEWA[i - 1] >= -dynamicThreshold) &&
+                    rsi[i] > RSI_OVERBOUGHT) {
+
                 signals.add(new TradeSignal(stockData.get(i).getDate(), TradeSignal.SELL));
             }
         }
@@ -57,10 +63,47 @@ public class TradingStrategy {
         return signals;
     }
 
+    private double[] calculateRSI(List<StockData> stockData, int period) {
+        double[] rsi = new double[stockData.size()];
+        double avgGain = 0, avgLoss = 0;
 
-    /**
-     * Calculates the exponential moving average (EWA).
-     */
+        for (int i = 1; i <= period; i++) {
+            double change = stockData.get(i).getAdjustedClose() - stockData.get(i - 1).getAdjustedClose();
+            if (change > 0) avgGain += change;
+            else avgLoss -= change;
+        }
+
+        avgGain /= period;
+        avgLoss /= period;
+        rsi[period] = 100 - (100 / (1 + avgGain / avgLoss));
+
+        for (int i = period + 1; i < stockData.size(); i++) {
+            double change = stockData.get(i).getAdjustedClose() - stockData.get(i - 1).getAdjustedClose();
+            avgGain = (avgGain * (period - 1) + Math.max(change, 0)) / period;
+            avgLoss = (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
+
+            rsi[i] = 100 - (100 / (1 + avgGain / avgLoss));
+        }
+
+        return rsi;
+    }
+
+    private double calculateVolatility(List<StockData> stockData, int currentIndex) {
+        int lookback = 20;
+        if (currentIndex < lookback) return 1.0;
+
+        double[] returns = new double[lookback];
+        for (int i = currentIndex - lookback; i < currentIndex; i++) {
+            returns[i - (currentIndex - lookback)] = (stockData.get(i + 1).getAdjustedClose() - stockData.get(i).getAdjustedClose()) /
+                    stockData.get(i).getAdjustedClose();
+        }
+
+        double meanReturn = Arrays.stream(returns).average().orElse(0);
+        double variance = Arrays.stream(returns).map(r -> Math.pow(r - meanReturn, 2)).sum() / lookback;
+
+        return Math.sqrt(variance);
+    }
+
     private double[] calculateEWA(List<StockData> stockData, int window) {
         double[] ewa = new double[stockData.size()];
         double alpha = 2.0 / (window + 1);
@@ -72,65 +115,13 @@ public class TradingStrategy {
         return ewa;
     }
 
-    /**
-     * Checks if momentum is positive over a short-term window.
-     */
-    private boolean isMomentumPositive(List<StockData> stockData, int index) {
-        int momentumWindow = 5;
-        if (index < momentumWindow) return false;
-
-        for (int i = index - momentumWindow; i < index; i++) {
-            if (stockData.get(i).getAdjustedClose() >= stockData.get(i + 1).getAdjustedClose()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Checks if momentum is negative over a short-term window.
-     */
-    private boolean isMomentumNegative(List<StockData> stockData, int index) {
-        int momentumWindow = 5;
-        if (index < momentumWindow) return false;
-
-        for (int i = index - momentumWindow; i < index; i++) {
-            if (stockData.get(i).getAdjustedClose() <= stockData.get(i + 1).getAdjustedClose()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Filters stocks based on their liquidity.
-     */
     private List<String> filterLiquidStocks(Map<String, List<StockData>> stockDataMap, int minVolume) {
         List<String> liquidStocks = new ArrayList<>();
         for (Map.Entry<String, List<StockData>> entry : stockDataMap.entrySet()) {
             List<StockData> data = entry.getValue();
             double avgVolume = data.stream().mapToDouble(StockData::getVolume).average().orElse(0);
-            if (avgVolume > minVolume) {
-                liquidStocks.add(entry.getKey());
-            }
+            if (avgVolume > minVolume) liquidStocks.add(entry.getKey());
         }
         return liquidStocks;
-    }
-
-    /**
-     * Calculates historical volatility as a dynamic factor for thresholds.
-     */
-    private double calculateVolatility(List<StockData> stockData) {
-        double[] returns = new double[stockData.size() - 1];
-        for (int i = 1; i < stockData.size(); i++) {
-            double dailyReturn = (stockData.get(i).getAdjustedClose() - stockData.get(i - 1).getAdjustedClose()) /
-                    stockData.get(i - 1).getAdjustedClose();
-            returns[i - 1] = dailyReturn;
-        }
-
-        double meanReturn = Arrays.stream(returns).average().orElse(0);
-        double variance = Arrays.stream(returns).map(r -> Math.pow(r - meanReturn, 2)).sum() / returns.length;
-
-        return Math.sqrt(variance);
     }
 }
