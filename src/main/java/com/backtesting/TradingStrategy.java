@@ -4,13 +4,13 @@ import java.util.*;
 
 public class TradingStrategy {
 
-    private static final int SHORT_TERM_WINDOW = 50;
-    private static final int LONG_TERM_WINDOW = 200;
-    private static final double DEFAULT_SIGNAL_THRESHOLD = 0.02;
-    private static final int MIN_VOLUME = 100000;
-    private static final int RSI_PERIOD = 14;
-    private static final double RSI_OVERBOUGHT = 70.0;
-    private static final double RSI_OVERSOLD = 30.0;
+    private static final int SHORT_TERM_WINDOW = 20;
+    private static final int LONG_TERM_WINDOW = 100;
+    private static final double DEFAULT_SIGNAL_THRESHOLD = 0.05;
+    private static final int MIN_VOLUME = 200000;
+    private static final int RSI_PERIOD = 21;
+    private static final double RSI_OVERBOUGHT = 75.0;
+    private static final double RSI_OVERSOLD = 25.0;
 
     private static final double BASE_STOP_LOSS = 0.02; // 2% default loss
     private static final double BASE_TAKE_PROFIT = 0.04; // 4% default profit
@@ -30,7 +30,7 @@ public class TradingStrategy {
             portfolio.executeSignals(symbol, signals, stockData);
         }
 
-        portfolio.addMarketReturns(marketReturns);
+
         return portfolio;
     }
 
@@ -45,24 +45,30 @@ public class TradingStrategy {
             double volatilityFactor = calculateVolatility(stockData, i);
 
             // Dynamic threshold based on volatility
-            double dynamicThreshold = DEFAULT_SIGNAL_THRESHOLD * volatilityFactor;
+            double dynamicThreshold = Math.min(Math.max(DEFAULT_SIGNAL_THRESHOLD * volatilityFactor, 0.01), 0.05);
 
             if (diff > dynamicThreshold &&
                     (shortTermEWA[i - 1] - longTermEWA[i - 1] <= dynamicThreshold) &&
-                    rsi[i] < RSI_OVERSOLD) {
-
+                    rsi[i] < RSI_OVERSOLD &&
+                    isTrendFavorable(shortTermEWA, longTermEWA, i)) {
                 signals.add(new TradeSignal(stockData.get(i).getDate(), TradeSignal.BUY));
             } else if (diff < -dynamicThreshold &&
                     (shortTermEWA[i - 1] - longTermEWA[i - 1] >= -dynamicThreshold) &&
-                    rsi[i] > RSI_OVERBOUGHT) {
-
+                    rsi[i] > RSI_OVERBOUGHT &&
+                    isTrendFavorable(shortTermEWA, longTermEWA, i)) {
                 signals.add(new TradeSignal(stockData.get(i).getDate(), TradeSignal.SELL));
             }
+
+// Helper function
+
+
         }
 
         return signals;
     }
-
+    private boolean isTrendFavorable(double[] shortTermEWA, double[] longTermEWA, int i) {
+        return shortTermEWA[i] > longTermEWA[i]; // Example: Buy only when short-term > long-term
+    }
     private double[] calculateRSI(List<StockData> stockData, int period) {
         double[] rsi = new double[stockData.size()];
         double avgGain = 0, avgLoss = 0;
@@ -82,7 +88,9 @@ public class TradingStrategy {
             avgGain = (avgGain * (period - 1) + Math.max(change, 0)) / period;
             avgLoss = (avgLoss * (period - 1) + Math.max(-change, 0)) / period;
 
-            rsi[i] = 100 - (100 / (1 + avgGain / avgLoss));
+            rsi[i] = 100 - (100 / (1 + avgGain / Math.max(avgLoss, 1e-6)));
+
+
         }
 
         return rsi;

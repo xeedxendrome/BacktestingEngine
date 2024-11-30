@@ -21,7 +21,8 @@ public class Portfolio {
 
         double position = 0.0; // Current position (long or short)
         double entryPrice = 0.0; // Price at which the current position was opened
-        double stopLossThreshold = 0.05; // 5% stop-loss per trade
+        double stopLossThreshold = 2 * volatility; // Dynamic stop-loss based on volatility
+        // 5% stop-loss per trade
 
         for (int i = 0; i < stockData.size(); i++) {
             StockData data = stockData.get(i);
@@ -39,7 +40,7 @@ public class Portfolio {
                     if (position < 0) {
                         double pnl = (entryPrice - data.getAdjustedClose()) * Math.abs(position);
                         currentCapital += pnl;
-                        dailyReturns.add(pnl / startingCapital);
+                        dailyReturns.add(pnl / currentCapital); // Fix: Use current capital
                         trades.add(new Trade(symbol, data.getDate(), pnl));
                     }
 
@@ -51,7 +52,7 @@ public class Portfolio {
                     if (position > 0) {
                         double pnl = (data.getAdjustedClose() - entryPrice) * position;
                         currentCapital += pnl;
-                        dailyReturns.add(pnl / startingCapital);
+                        dailyReturns.add(pnl / currentCapital); // Fix: Use current capital
                         trades.add(new Trade(symbol, data.getDate(), pnl));
                     }
 
@@ -65,13 +66,13 @@ public class Portfolio {
             if (position > 0 && (entryPrice - data.getAdjustedClose()) / entryPrice >= stopLossThreshold) {
                 double pnl = (data.getAdjustedClose() - entryPrice) * position;
                 currentCapital += pnl;
-                dailyReturns.add(pnl / startingCapital);
+                dailyReturns.add(pnl / currentCapital);
                 trades.add(new Trade(symbol, data.getDate(), pnl));
                 position = 0;
             } else if (position < 0 && (data.getAdjustedClose() - entryPrice) / entryPrice >= stopLossThreshold) {
                 double pnl = (entryPrice - data.getAdjustedClose()) * Math.abs(position);
                 currentCapital += pnl;
-                dailyReturns.add(pnl / startingCapital);
+                dailyReturns.add(pnl / currentCapital);
                 trades.add(new Trade(symbol, data.getDate(), pnl));
                 position = 0;
             }
@@ -79,7 +80,7 @@ public class Portfolio {
             // Track daily portfolio value
             if (position != 0) {
                 double dailyPnl = (data.getAdjustedClose() - entryPrice) * position;
-                dailyReturns.add(dailyPnl / startingCapital);
+                dailyReturns.add(dailyPnl / currentCapital); // Fix: Use current capital
             }
         }
 
@@ -97,13 +98,13 @@ public class Portfolio {
      * Calculates position size based on portfolio volatility.
      */
     private double calculatePositionSize(double price) {
-        double volatilityFactor = Math.min(1, 1 / (volatility * 100));
-        return (currentCapital * volatilityFactor) / price;
+        double maxPositionFraction = 0.1; // Maximum 10% of portfolio capital
+        volatility = Math.min(volatility, 0.05); // Cap at 5%
+        double position = (currentCapital * Math.min(1, 1 / (volatility * 100))) / price;
+        return Math.min(position, maxPositionFraction * currentCapital / price);
     }
 
-    // Other methods (addMarketReturns, performRegressionAnalysis, calculateSignalAccuracy, etc.)
-
-public void addMarketReturns(List<Double> marketReturns) {
+    public void addMarketReturns(List<Double> marketReturns) {
         this.marketReturns.addAll(marketReturns);
     }
 
@@ -139,80 +140,11 @@ public void addMarketReturns(List<Double> marketReturns) {
     }
 
     /**
-     * Calculates the accuracy of trading signals.
-     */
-    public void calculateSignalAccuracy() {
-        int totalTrades = trades.size();
-        int profitableTrades = (int) trades.stream().filter(trade -> trade.getReturnValue() > 0).count();
-        int lossMakingTrades = totalTrades - profitableTrades;
-
-        double accuracyRate = (double) profitableTrades / totalTrades * 100;
-
-        // Print results
-        System.out.println("\nTrading Signal Accuracy:");
-        System.out.println("Total Trades: " + totalTrades);
-        System.out.println("Profitable Trades: " + profitableTrades);
-        System.out.println("Loss-Making Trades: " + lossMakingTrades);
-        System.out.println("Signal Accuracy: " + accuracyRate + "%");
-    }
-
-    /**
-     * Analyzes periods where the strategy worked and did not work.
-     */
-    public void analyzePeriods() {
-        List<Double> cumulativeReturns = new ArrayList<>();
-        double runningTotal = 0.0;
-
-        for (double dailyReturn : dailyReturns) {
-            runningTotal += dailyReturn;
-            cumulativeReturns.add(runningTotal);
-        }
-
-        double peak = Double.MIN_VALUE;
-        double trough = Double.MAX_VALUE;
-        String peakDate = null;
-        String troughDate = null;
-
-        // Identify the periods of success and failure
-        for (int i = 0; i < trades.size(); i++) {
-            Trade trade = trades.get(i);
-            double cumulativeReturn = cumulativeReturns.get(i);
-
-            if (cumulativeReturn > peak) {
-                peak = cumulativeReturn;
-                peakDate = trade.getDate();
-            }
-            if (cumulativeReturn < trough) {
-                trough = cumulativeReturn;
-                troughDate = trade.getDate();
-            }
-        }
-
-        // Print analysis
-        System.out.println("\nPeriod Analysis:");
-        System.out.println("Highest Cumulative Return: " + peak + " (on " + peakDate + ")");
-        System.out.println("Lowest Cumulative Return: " + trough + " (on " + troughDate + ")");
-    }
-
-    /**
-     * Prints a summary of trades and portfolio performance.
-     */
-    public void printMetrics() {
-        System.out.println("\nTrade History:");
-        for (Trade trade : trades) {
-            System.out.printf("Symbol: %s, Date: %s, PnL: %.2f%n",
-                    trade.getSymbol(), trade.getDate(), trade.getReturnValue());
-        }
-
-        calculatePerformanceMetrics();
-    }
-
-    /**
      * Calculates performance metrics for the portfolio.
      */
     public void calculatePerformanceMetrics() {
         double averageReturn = dailyReturns.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-        double adjustedReturn = averageReturn - riskFreeRate / 252;  // Risk-free rate adjusted for daily returns
+        double adjustedReturn = averageReturn - (riskFreeRate / 252); // Fix: Risk-free rate as daily
         double volatility = Math.sqrt(
                 dailyReturns.stream().mapToDouble(r -> Math.pow(r - averageReturn, 2)).sum() / dailyReturns.size()
         );
@@ -245,7 +177,7 @@ public void addMarketReturns(List<Double> marketReturns) {
         double runningTotal = startingCapital;
 
         for (double dailyReturn : dailyReturns) {
-            runningTotal += dailyReturn * startingCapital;
+            runningTotal += dailyReturn * runningTotal; // Fix: Proper scaling
             cumulativeCapital.add(runningTotal);
         }
 
@@ -254,6 +186,83 @@ public void addMarketReturns(List<Double> marketReturns) {
 
 
 
+/**
 
+        /**
+         * Calculates the accuracy of trading signals.
+         */
+        public void calculateSignalAccuracy() {
+            int totalTrades = trades.size();
+            int profitableTrades = (int) trades.stream().filter(trade -> trade.getReturnValue() > 0).count();
+            int lossMakingTrades = totalTrades - profitableTrades;
+    
+            double accuracyRate = (double) profitableTrades / totalTrades * 100;
+    
+            // Print results
+            System.out.println("\nTrading Signal Accuracy:");
+            System.out.println("Total Trades: " + totalTrades);
+            System.out.println("Profitable Trades: " + profitableTrades);
+            System.out.println("Loss-Making Trades: " + lossMakingTrades);
+            System.out.println("Signal Accuracy: " + accuracyRate + "%");
+        }
+    
+        /**
+         * Analyzes periods where the strategy worked and did not work.
+         */
+        public void analyzePeriods() {
+            List<Double> cumulativeReturns = new ArrayList<>();
+            double runningTotal = 0.0;
+    
+            for (double dailyReturn : dailyReturns) {
+                runningTotal += dailyReturn;
+                cumulativeReturns.add(runningTotal);
+            }
+    
+            double peak = Double.MIN_VALUE;
+            double trough = Double.MAX_VALUE;
+            String peakDate = null;
+            String troughDate = null;
+    
+            // Identify the periods of success and failure
+            for (int i = 0; i < trades.size(); i++) {
+                Trade trade = trades.get(i);
+                double cumulativeReturn = cumulativeReturns.get(i);
+    
+                if (cumulativeReturn > peak) {
+                    peak = cumulativeReturn;
+                    peakDate = trade.getDate();
+                }
+                if (cumulativeReturn < trough) {
+                    trough = cumulativeReturn;
+                    troughDate = trade.getDate();
+                }
+            }
+    
+            // Print analysis
+            System.out.println("\nPeriod Analysis:");
+            System.out.println("Highest Cumulative Return: " + peak + " (on " + peakDate + ")");
+            System.out.println("Lowest Cumulative Return: " + trough + " (on " + troughDate + ")");
+        }
+    
+        /**
+         * Prints a summary of trades and portfolio performance.
+         */
+        public void printMetrics() {
+            System.out.println("\nTrade History:");
+            for (Trade trade : trades) {
+                System.out.printf("Symbol: %s, Date: %s, PnL: %.2f%n",
+                        trade.getSymbol(), trade.getDate(), trade.getReturnValue());
+            }
+    
+            calculatePerformanceMetrics();
+        }
+    
+        /**
+         * Calculates performance metrics for the portfolio.
+         */
 
-}
+    
+    
+    
+    
+    }

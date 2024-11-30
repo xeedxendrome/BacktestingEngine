@@ -10,14 +10,16 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.*;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import com.google.gson.*;
 
 public class TiingoDataFetcher {
 
-    private static final String API_KEY = "56c11b85e024d7e477e03627d6879e45c61faa51";
+    private static final String API_KEY = "fef1d7fef29d9c0c8ad102a63ddb1c5931c54762";
     private static final String BASE_URL = "https://api.tiingo.com/tiingo/daily";
     private static final String CACHE_DIRECTORY = "stock_cache"; // Directory for storing cached files
-    private static final String START_DATE = "2021-01-01";
+    private static final String START_DATE = "2018-01-01";
     private static final String END_DATE = "2023-12-31";
 
     private static List<String> STOCK_SYMBOLS;
@@ -47,7 +49,9 @@ public class TiingoDataFetcher {
                 Elements cols = row.select("td");
                 if (cols.size() > 0) {
                     String symbol = cols.get(0).text();
-                    sp500Symbols.add(symbol);
+                    if (!symbol.matches(".*\\d.*")) { // Regex to check if the symbol contains digits
+                        sp500Symbols.add(symbol);
+                    }
                 }
             }
         } catch (IOException e) {
@@ -61,6 +65,7 @@ public class TiingoDataFetcher {
         Map<String, List<StockData>> stockDataMap = new HashMap<>();
 
         for (String symbol : STOCK_SYMBOLS) {
+
             List<StockData> stockData = getStockData(symbol);
             if (stockData != null) {
                 stockDataMap.put(symbol, stockData);
@@ -84,6 +89,7 @@ public class TiingoDataFetcher {
         }
 
         // Fetch data from Tiingo API
+
         List<StockData> fetchedData = fetchStockDataFromApi(symbol);
         if (fetchedData != null) {
             // Store data in the cache
@@ -171,6 +177,7 @@ public class TiingoDataFetcher {
     // Helper method to save data to the disk cache
     private void saveToCache(String symbol, List<StockData> stockData) {
         try {
+            ensureCacheDirectoryExists();
             File file = new File(CACHE_DIRECTORY, symbol + ".json");
             Gson gson = new Gson();
             FileWriter writer = new FileWriter(file);
@@ -183,6 +190,7 @@ public class TiingoDataFetcher {
 
     // Helper method to load data from the disk cache
     private List<StockData> loadFromCache(String symbol) {
+
         File file = new File(CACHE_DIRECTORY, symbol + ".json");
         if (file.exists()) {
             try {
@@ -197,4 +205,11 @@ public class TiingoDataFetcher {
         }
         return null;
     }
+    private void ensureCacheDirectoryExists() {
+        File directory = new File(CACHE_DIRECTORY);
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+    }
+
 }
