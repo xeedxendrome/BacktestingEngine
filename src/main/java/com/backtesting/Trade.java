@@ -1,11 +1,13 @@
 package com.backtesting;
 
+import java.math.BigDecimal;
+
 public class Trade {
     private String symbol;
     private String date;
-    private double returnValue;
+    private BigDecimal returnValue;
 
-    public Trade(String symbol, String date, double returnValue) {
+    public Trade(String symbol, String date, BigDecimal returnValue) {
         this.symbol = symbol;
         this.date = date;
         this.returnValue = returnValue;
@@ -19,7 +21,7 @@ public class Trade {
         return date;
     }
 
-    public double getReturnValue() {
+    public BigDecimal getReturnValue() {
         return returnValue;
     }
 }

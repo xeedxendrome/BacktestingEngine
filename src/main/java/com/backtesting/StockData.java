@@ -1,11 +1,13 @@
 package com.backtesting;
 
+import java.math.BigDecimal;
+
 public class StockData {
     private String date;
-    private double adjustedClose;
+    private BigDecimal adjustedClose;
     private int volume; // Added volume field
 
-    public StockData(String date, double adjustedClose, int volume) {
+    public StockData(String date, BigDecimal adjustedClose, int volume) {
         this.date = date;
         this.adjustedClose = adjustedClose;
         this.volume = volume;
@@ -15,7 +17,7 @@ public class StockData {
         return date;
     }
 
-    public double getAdjustedClose() {
+    public BigDecimal getAdjustedClose() {
         return adjustedClose;
     }
 

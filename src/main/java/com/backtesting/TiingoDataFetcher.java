@@ -10,8 +10,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.*;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import com.google.gson.*;
 
 public class TiingoDataFetcher {
@@ -132,7 +132,7 @@ public class TiingoDataFetcher {
         for (JsonElement element : jsonArray) {
             JsonObject obj = element.getAsJsonObject();
             String date = obj.get("date").getAsString();
-            double adjustedClose = obj.get("adjClose").getAsDouble();
+            BigDecimal adjustedClose = BigDecimal.valueOf(obj.get("adjClose").getAsDouble());
             int volume = obj.get("volume").getAsInt();
 
             // Create StockData object and add to the list
@@ -143,25 +143,35 @@ public class TiingoDataFetcher {
     }
 
     // Calculate daily market returns for the S&P 500 index
-    public List<Double> calculateMarketReturns() {
+
+    public Map<String, BigDecimal> calculateMarketReturns() {
         // Correct symbol for S&P 500 index (adjust as per Tiingo API documentation)
         String sp500Symbol = "SPY"; // URL-encoded "^GSPC" (common for APIs)
 
         // Fetch data for S&P 500
         List<StockData> sp500Data = getStockData(sp500Symbol);
-        List<Double> marketReturns = new ArrayList<>();
+        Map<String, BigDecimal> marketReturns = new LinkedHashMap<>(); // Use LinkedHashMap to maintain insertion order
 
         // Validate fetched data
         if (sp500Data != null && !sp500Data.isEmpty()) {
+
             // Ensure data is sufficient for calculation
             if (sp500Data.size() > 1) {
                 for (int i = 1; i < sp500Data.size(); i++) {
-                    double previousClose = sp500Data.get(i - 1).getAdjustedClose();
-                    double currentClose = sp500Data.get(i).getAdjustedClose();
+                    StockData previousData = sp500Data.get(i - 1);
+                    StockData currentData = sp500Data.get(i);
 
-                    // Calculate the daily return
-                    double dailyReturn = (currentClose - previousClose) / previousClose * 100;
-                    marketReturns.add(dailyReturn);
+                    BigDecimal previousClose = previousData.getAdjustedClose();
+                    BigDecimal currentClose = currentData.getAdjustedClose();
+
+                    // Calculate the daily return: ((currentClose - previousClose) / previousClose) * 100
+                    BigDecimal dailyReturn = currentClose.subtract(previousClose)
+                            .divide(previousClose, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100));
+
+                    // Add date and return to the map
+
+                    marketReturns.put(currentData.getDate(), dailyReturn);
                 }
             } else {
                 System.err.println("Insufficient data to calculate market returns.");
@@ -172,6 +182,7 @@ public class TiingoDataFetcher {
 
         return marketReturns;
     }
+
 
 
     // Helper method to save data to the disk cache

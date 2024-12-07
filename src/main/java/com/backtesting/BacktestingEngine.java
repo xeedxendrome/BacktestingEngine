@@ -1,12 +1,14 @@
 package com.backtesting;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-public class MovingAverageStrategy {
+public class BacktestingEngine {
 
     public static void main(String[] args) {
         // Initialize data fetcher
+
         TiingoDataFetcher fetcher = new TiingoDataFetcher();
 
         // Fetch stock data for all symbols
@@ -19,26 +21,28 @@ public class MovingAverageStrategy {
 
         // Initialize trading strategy
         TradingStrategy strategy = new TradingStrategy();
-        List<Double> marketReturns = fetcher.calculateMarketReturns();
+        Map<String, BigDecimal> marketReturns = fetcher.calculateMarketReturns();
         // Run moving average strategy and generate a portfolio
-        Portfolio portfolio = strategy.runImprovedStrategy(stockDataMap, marketReturns);
+        Portfolio portfolio = strategy.EWAStrategy(stockDataMap);
 
         // Print initial portfolio performance
         System.out.println("\n=== Initial Portfolio Performance ===");
-        portfolio.calculatePerformanceMetrics();
+
         //portfolio.printMetrics();
 
         // Add market returns for regression analysis
 
         if (marketReturns != null && !marketReturns.isEmpty()) {
-            portfolio.addMarketReturns(marketReturns);
 
+
+            portfolio.addMarketReturns(marketReturns);
+            portfolio.alignReturnsForRegression();
             // Perform regression analysis
             portfolio.performRegressionAnalysis();
         } else {
             System.err.println("Market returns data is unavailable for regression analysis.");
         }
-
+        portfolio.calculatePerformanceMetrics();
         // Calculate signal accuracy
         portfolio.calculateSignalAccuracy();
 
