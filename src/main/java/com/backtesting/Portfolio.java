@@ -6,24 +6,40 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
 
-
+/**
+ * Portfolio class manages trades, calculates performance metrics,
+ * evaluates signal accuracy, and performs regression analysis on returns.
+ */
 public class Portfolio {
 
+    // Stores all executed trades
     private final List<Trade> trades = new ArrayList<>();
+
+    // Maps to store daily returns and market returns for regression
     private final Map<String, BigDecimal> dailyReturnsMap = new LinkedHashMap<>();
     private final List<BigDecimal> dailyReturns = new ArrayList<>();
     private final Map<String, BigDecimal> marketReturnsMap = new LinkedHashMap<>();
     private final List<BigDecimal> marketReturns = new ArrayList<>();
 
+    // Portfolio constants
     private static final BigDecimal STARTING_CAPITAL = new BigDecimal("100000.00");
     private BigDecimal currentCapital = STARTING_CAPITAL;
     private static final BigDecimal RISK_FREE_RATE = new BigDecimal("0.02"); // 2% annual
     private BigDecimal volatility = new BigDecimal("0.01");
 
+    /**
+     * Updates the profit and loss (PnL) for a given date.
+     * @param date The date of the update.
+     * @param value The PnL value to add.
+     */
     public void updatepnl(String date, BigDecimal value) {
         dailyReturnsMap.merge(date, value, BigDecimal::add);
     }
 
+    /**
+     * Executes trading signals on the provided stock data.
+     * Includes logic for managing positions, stop-losses, and updating PnL.
+     */
     public void executeSignals(String symbol, List<TradeSignal> signals, List<StockData> stockData) {
         if (signals.isEmpty()) return;
 
@@ -32,6 +48,7 @@ public class Portfolio {
         BigDecimal stopLossThreshold = volatility.multiply(new BigDecimal("2"));
 
         for (StockData data : stockData) {
+            // Find matching signal for the current date
             Optional<TradeSignal> signal = signals.stream()
                     .filter(s -> s.getDate().equals(data.getDate()))
                     .findFirst();
@@ -55,8 +72,7 @@ public class Portfolio {
                     // Open long position
                     position = calculatePositionSize(data.getAdjustedClose());
                     entryPrice = data.getAdjustedClose();
-                }
-                else if (action.equals(TradeSignal.SELL) && position.compareTo(BigDecimal.ZERO) >= 0) {
+                } else if (action.equals(TradeSignal.SELL) && position.compareTo(BigDecimal.ZERO) >= 0) {
                     // Close long position
                     if (position.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal pnl = data.getAdjustedClose().subtract(entryPrice)
@@ -90,8 +106,7 @@ public class Portfolio {
                     trades.add(new Trade(symbol, data.getDate(), pnl));
                     position = BigDecimal.ZERO;
                 }
-            }
-            else if (position.compareTo(BigDecimal.ZERO) < 0) {
+            } else if (position.compareTo(BigDecimal.ZERO) < 0) {
                 BigDecimal lossPct = data.getAdjustedClose().subtract(entryPrice)
                         .divide(entryPrice, 4, RoundingMode.HALF_UP);
 
@@ -122,8 +137,11 @@ public class Portfolio {
         }
     }
 
+    /**
+     * Calculates the position size based on the current capital and price.
+     * Considers volatility and a maximum position fraction.
+     */
     private BigDecimal calculatePositionSize(BigDecimal price) {
-        // Position sizing logic with BigDecimal
         final BigDecimal MAX_POSITION_FRACTION = new BigDecimal("0.1");
         final BigDecimal MAX_VOLATILITY = new BigDecimal("0.05");
 
@@ -159,8 +177,7 @@ public class Portfolio {
             dailyReturns.add(dailyReturnsMap.get(date));
             marketReturns.add(marketReturnsMap.get(date));
         });
-        System.out.println(dailyReturns);
-        System.out.println(marketReturns);
+
     }
 
     public void performRegressionAnalysis() {
@@ -186,9 +203,10 @@ public class Portfolio {
         double rSquared = regression.calculateRSquared();
 
         System.out.println("\nRegression Analysis:");
-        System.out.println("Alpha: " + new BigDecimal(coefficients[0]));
-        System.out.println("Beta: " + new BigDecimal(coefficients[1]));
-        System.out.println("R-Squared: " + new BigDecimal(rSquared));
+        System.out.println("Alpha: " + formatDecimal(new BigDecimal(coefficients[0])));
+        System.out.println("Beta: " + formatDecimal(new BigDecimal(coefficients[1])));
+        System.out.println("R-Squared: " + formatDecimal(new BigDecimal(rSquared)));
+        System.out.println("\n");
     }
 
     public void calculatePerformanceMetrics() {
@@ -220,13 +238,19 @@ public class Portfolio {
 
         // Output Metrics
         System.out.println("Portfolio Performance:");
-        System.out.println("Average Return: " + averageReturn.multiply(new BigDecimal("100")) + "%");
-        System.out.println("Adjusted Return: " + adjustedReturn.multiply(new BigDecimal("100")) + "%");
-        System.out.println("Volatility: " + volatility.multiply(new BigDecimal("100")) + "%");
-        System.out.println("Sharpe Ratio: " + sharpeRatio);
-        System.out.println("Maximum Drawdown: " + maxDrawdown.multiply(new BigDecimal("100")) + "%");
+        System.out.println("Average Return: " + formatPercentage(averageReturn) + "%");
+        System.out.println("Adjusted Return: " + formatPercentage(adjustedReturn) + "%");
+        System.out.println("Volatility: " + formatPercentage(volatility) + "%");
+        System.out.println("Sharpe Ratio: " + formatDecimal(sharpeRatio));
+        System.out.println("Maximum Drawdown: " + formatPercentage(maxDrawdown) + "%");
     }
-
+    // Utility method to format percentage values
+    private static String formatPercentage(BigDecimal value) {
+        return value.multiply(new BigDecimal("100")).setScale(4, RoundingMode.HALF_UP).toString();
+    }
+    private static String formatDecimal(BigDecimal value) {
+        return value.setScale(4, RoundingMode.HALF_UP).toString();
+    }
     private BigDecimal calculateMaxDrawdown() {
         List<BigDecimal> cumulativeCapital = getCumulativeCapital();
         BigDecimal maxDrawdown = BigDecimal.ZERO;
@@ -298,15 +322,5 @@ public class Portfolio {
         }
     }
 
-    public void printMetrics() {
-        System.out.println("\nTrade History:");
-        trades.forEach(trade ->
-                System.out.printf("Symbol: %s, Date: %s, PnL: %s%n",
-                        trade.getSymbol(),
-                        trade.getDate(),
-                        trade.getReturnValue().setScale(2, RoundingMode.HALF_UP))
-        );
 
-        calculatePerformanceMetrics();
-    }
 }
