@@ -77,7 +77,7 @@ public class TradingStrategy {
             else if (diff.compareTo(dynamicThreshold.negate()) < 0 &&
                     shortTermEWA[i - 1].subtract(longTermEWA[i - 1]).compareTo(dynamicThreshold.negate()) >= 0 &&
                     rsi[i].compareTo(RSI_OVERBOUGHT) > 0 &&
-                    isTrendFavorable(shortTermEWA, longTermEWA, i)) {
+                    !isTrendFavorable(shortTermEWA, longTermEWA, i)) {
                 signals.add(new TradeSignal(stockData.get(i).getDate(), TradeSignal.SELL));
             }
         }

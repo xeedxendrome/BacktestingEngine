@@ -30,7 +30,7 @@ public class BacktestingEngine {
         // Fetch market returns for regression analysis and comparison
         Map<String, BigDecimal> marketReturns = fetcher.calculateMarketReturns();
 
-        // Apply the Equal Weighted Average Strategy (EWAStrategy) and generate a portfolio
+        // Apply the Exponential Average Strategy (EWAStrategy) and generate a portfolio
         Portfolio portfolio = strategy.EWAStrategy(stockDataMap);
 
         // Add market returns to the portfolio for regression analysis
